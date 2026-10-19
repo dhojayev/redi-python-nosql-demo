@@ -1,0 +1,48 @@
+services:
+  mongo:
+    image: mongo:8.0
+    container_name: nosql-demo-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      # Local demo credentials only - never reuse these anywhere real.
+      MONGO_INITDB_ROOT_USERNAME: demo
+      MONGO_INITDB_ROOT_PASSWORD: demo
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Web UI to browse the data: http://localhost:8082 (override with UI_PORT=...)
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: nosql-demo-ui
+    ports:
+      - "${UI_PORT:-8082}:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://demo:demo@mongo:27017/
+      ME_CONFIG_BASICAUTH: "false"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # FastAPI app, seeds the data on start. Swagger UI: http://localhost:8000/docs
+  api:
+    build: .
+    container_name: nosql-demo-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      MONGO_URL: mongodb://demo:demo@mongo:27017/
+    volumes:
+      - ./app:/code/app  # edit code live, uvicorn reloads
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo-data:
